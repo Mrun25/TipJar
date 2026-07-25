@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- SEO -->
+  <title>TipJar — Support the Art, On-Chain</title>
+  <meta name="description"
+        content="A transparent, permissionless tip jar on Ethereum Sepolia. Connect your wallet, send a tip with a message, and appear on a live on-chain supporter wall. No middleman, no fees." />
+  <meta property="og:title"       content="TipJar — Support the Art, On-Chain" />
+  <meta property="og:description" content="Send a micro-tip and leave your mark on a permanent, on-chain supporter wall." />
+  <meta property="og:type"        content="website" />
+
+  <link rel="stylesheet" href="style.css" />
+  <!-- ethers v6 (browser ESM build via CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
+</head>
+<body>
+
+  <!-- ── Navigation / Wallet Bar ─────────────────────────────────────────── -->
+  <header>
+    <div class="container">
+      <nav class="navbar" role="navigation" aria-label="Main navigation">
+        <a class="navbar__brand" href="#" aria-label="TipJar home">
+          <span class="navbar__brand-icon">☕</span>
+          <span>TipJar</span>
+        </a>
+
+        <div class="navbar__right">
+          <!-- Network badge — hidden until connected -->
+          <div id="network-badge" class="network-badge" style="display:none;" aria-live="polite"></div>
+
+          <!-- Connect / Wallet pill -->
+          <button id="btn-connect" class="wallet-pill" aria-label="Connect MetaMask wallet">
+            Connect Wallet
+          </button>
+        </div>
+      </nav>
+
+      <!-- Wrong-network warning banner -->
+      <div id="network-warning" class="network-warning" role="alert" aria-live="assertive">
+        <span>⚠️ Please switch to <strong id="expected-network">Ethereum Sepolia</strong> testnet to use TipJar.</span>
+        <button id="btn-switch-network" class="network-warning__switch">
+          Switch Network
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="container">
+
+      <!-- ── Hero ─────────────────────────────────────────────────────────── -->
+      <section class="hero" aria-label="Hero section">
+        <div class="hero__eyebrow">☕ Transparent · On-Chain · No middleman</div>
+        <h1 class="hero__title">Support the <em>art.</em></h1>
+        <p class="hero__subtitle">
+          Send a tip, leave a message, and watch your name appear on a live
+          supporter wall — recorded permanently on Ethereum.
+        </p>
+      </section>
+
+      <!-- ── Stats strip ───────────────────────────────────────────────────── -->
+      <section class="stats-strip" aria-label="Overall statistics">
+        <div class="stat">
+          <div class="stat__value" id="stat-total-tips">—</div>
+          <div class="stat__label">Total Tips</div>
+        </div>
+        <div class="stats-divider" role="separator"></div>
+        <div class="stat">
+          <div class="stat__value" id="stat-total-eth">—</div>
+          <div class="stat__label">ETH Tipped</div>
+        </div>
+        <div class="stats-divider" role="separator"></div>
+        <div class="stat">
+          <div class="stat__value" id="stat-supporters">—</div>
+          <div class="stat__label">Supporters</div>
+        </div>
+      </section>
+
+      <!-- ── Main grid ─────────────────────────────────────────────────────── -->
+      <div class="main-grid">
+        <!-- ── Left Sidebar (Form & Artist) ────────────────────────────────── -->
+        <div class="sidebar" style="display:flex; flex-direction:column; gap:var(--space-md);">
+          <!-- ── Tip Form ────────────────────────────────────────────────────── -->
+        <div class="card" id="tip-form-card">
+          <h2 class="card__title">☕ Send a Tip</h2>
+
+          <form id="tip-form" novalidate>
+            <!-- Amount -->
+            <div class="form-group">
+              <label class="form-label" for="input-amount">Amount (ETH)</label>
+              <input
+                id="input-amount"
+                class="form-input form-input--amount"
+                type="number"
+                min="0.0001"
+                step="0.001"
+                placeholder="0.001"
+                aria-describedby="amount-presets"
+                autocomplete="off"
+              />
+              <div class="amount-presets" id="amount-presets" aria-label="Preset amounts">
+                <button type="button" class="preset-chip" data-amount="0.001">0.001 ETH</button>
+                <button type="button" class="preset-chip" data-amount="0.005">0.005 ETH</button>
+                <button type="button" class="preset-chip" data-amount="0.01">0.01 ETH</button>
+                <button type="button" class="preset-chip" data-amount="0.05">0.05 ETH</button>
+              </div>
+            </div>
+
+            <!-- Message -->
+            <div class="form-group">
+              <label class="form-label" for="input-message">Message <span style="color:#9ca3af;font-weight:400">(optional)</span></label>
+              <textarea
+                id="input-message"
+                class="form-input"
+                maxlength="280"
+                placeholder="Love your comics! Keep creating ✨"
+                rows="3"
+                aria-describedby="char-counter"
+              ></textarea>
+              <div id="char-counter" class="char-counter" aria-live="polite">0 / 280</div>
+            </div>
+
+            <!-- Submit -->
+            <button type="submit" id="btn-send-tip" class="btn-primary" disabled aria-label="Send tip transaction">
+              <span id="btn-send-icon">☕</span>
+              <span id="btn-send-text">Connect Wallet First</span>
+            </button>
+
+            <!-- Tx status -->
+            <div id="tx-status" class="tx-status" role="status" aria-live="polite"></div>
+          </form>
+        </div>
+
+        <!-- ── Artist Card ─────────────────────────────────────────────────── -->
+        <div class="card" id="artist-card">
+          <h2 class="card__title">🎨 About the Artist</h2>
+
+          <div style="display:flex;flex-direction:column;gap:var(--space-md);height:100%;">
+            <!-- Artist avatar placeholder -->
+            <div style="
+              width:64px;height:64px;border-radius:50%;
+              background:linear-gradient(135deg,#C2C5FF,#161857);
+              display:flex;align-items:center;justify-content:center;
+              font-size:28px;
+            ">🎨</div>
+
+            <div>
+              <div style="font-size:16px;font-weight:600;margin-bottom:4px;">Comic Artist</div>
+              <div style="font-size:13px;color:#6b7280;line-height:1.6;">
+                Posting free webcomics for two years. Your tips keep the coffee
+                flowing and the strips coming. Every tip is on-chain — transparent,
+                permanent, no middleman.
+              </div>
+            </div>
+
+            <!-- Contract info -->
+            <div style="
+              padding:12px;border-radius:var(--radius-md);
+              background:var(--color-surface);border:1px solid var(--color-border);
+              font-size:12px;
+            ">
+              <div style="font-weight:600;margin-bottom:6px;color:var(--color-primary);">📋 Contract</div>
+              <div style="color:#6b7280;word-break:break-all;font-variant-numeric:tabular-nums;" id="contract-address-display">
+                Loading…
+              </div>
+              <div style="margin-top:6px;">
+                <a id="etherscan-link" href="#" target="_blank" rel="noopener noreferrer"
+                   style="font-size:12px;color:var(--color-primary);font-weight:500;text-decoration:none;">
+                  View on Etherscan ↗
+                </a>
+              </div>
+            </div>
+
+            <!-- MetaMask Setup Guide -->
+            <div style="
+              padding:12px;border-radius:var(--radius-md);
+              background:var(--color-tertiary);
+              font-size:12px;color:#4b5563;line-height:1.6;
+            ">
+              <div style="font-weight:600;color:var(--color-primary);margin-bottom:6px;">🦊 How to connect MetaMask</div>
+              <ol style="padding-left:16px;margin:0;display:flex;flex-direction:column;gap:4px;">
+                <li>Install <a href="https://metamask.io/download/" target="_blank" rel="noopener noreferrer" style="color:var(--color-primary);font-weight:500;">MetaMask</a> if needed</li>
+                <li>Switch network to <strong>Sepolia Testnet</strong></li>
+                <li>Get free test ETH:
+                  <a href="https://sepoliafaucet.com" target="_blank" rel="noopener noreferrer" style="color:var(--color-primary);font-weight:500;">sepoliafaucet.com</a>
+                  · <a href="https://faucets.chain.link/sepolia" target="_blank" rel="noopener noreferrer" style="color:var(--color-primary);font-weight:500;">chain.link</a>
+                </li>
+                <li>Click <strong>Connect Wallet</strong> above</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+        </div> <!-- End Sidebar -->
+
+        <!-- ── Right Column (Supporter Wall) ───────────────────────────────── -->
+        <div class="main-content">
+        <!-- ── Supporter Wall ──────────────────────────────────────────────── -->
+        <div class="card wall-card" id="wall-card" style="height: 100%;">
+          <div class="wall-header">
+            <h2 class="card__title" style="margin-bottom:0;">🏆 Supporter Wall</h2>
+            <div class="live-badge">
+              <span class="live-dot" aria-hidden="true"></span>
+              <span>Live · On-Chain</span>
+            </div>
+          </div>
+
+          <div class="feed" id="feed" role="feed" aria-label="Live supporter feed" aria-live="polite">
+            <!-- Populated by app.js -->
+            <div class="feed-empty">
+              <div class="feed-empty__icon">☕</div>
+              <div class="feed-empty__text">Loading on-chain supporters…</div>
+            </div>
+          </div>
+        </div>
+        </div> <!-- End Main Content -->
+      </div><!-- /main-grid -->
+    </div><!-- /container -->
+  </main>
+
+  <!-- ── Footer ──────────────────────────────────────────────────────────── -->
+  <footer class="footer">
+    <div class="container">
+      <p>
+        Built for the
+        <a href="https://loops.house" target="_blank" rel="noopener noreferrer">MetaMask Community Builder Challenge Pune</a>
+        · Contract on
+        <a id="footer-etherscan" href="#" target="_blank" rel="noopener noreferrer">Sepolia Etherscan</a>
+        · <a href="https://github.com" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
+      </p>
+    </div>
+  </footer>
+
+  <!-- ── Toast container ─────────────────────────────────────────────────── -->
+  <div class="toast-container" id="toast-container" role="region" aria-label="Notifications" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
